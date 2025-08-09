@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Upload NFT - NovaMint</title>
+    <link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+    <header class="main-header">
+        <div class="logo-container">
+            <a href="dashboard.html" class="logo-text">Nova<span>Mint</span></a>
+        </div>
+        <nav class="nav-buttons">
+            <a href="dashboard.html" class="header-action-button">Dashboard</a>
+        </nav>
+    </header>
+
+    <main class="container">
+        <div class="form-page-container">
+            <h1>Upload Your Unique NFT</h1>
+            <p style="color: var(--secondary-text); margin-top: -1rem; margin-bottom: 1.5rem;">Upload a one-of-a-kind NFT. For multiple copies, use the Mint page.</p>
+            <form id="uploadForm">
+                <div class="form-group">
+                    <label for="nftName">NFT Name</label>
+                    <input type="text" id="nftName" required>
+                </div>
+                <div class="form-group">
+                    <label for="nftPrice">Price (in ETH)</label>
+                    <input type="number" id="nftPrice" min="0.01" step="0.01" required placeholder="e.g., 1.5">
+                </div>
+                <div class="form-group">
+                    <label for="nftImage">NFT Picture (Image File)</label>
+                    <input type="file" id="nftImage" accept="image/*" required>
+                </div>
+                <button type="submit" class="submit-button">Upload & Generate Contract</button>
+            </form>
+
+            <div id="solidityCodeContainer" class="solidity-code-box" style="display:none;">
+                <h3>Generated Solidity Contract (ERC721 Template)</h3>
+                <pre id="solidityCodeOutput"></pre>
+                <button id="savePdfButton" class="submit-button download-sol-button">Save Contract as PDF</button>
+                 <p style="font-size:0.8em; color: var(--secondary-text); margin-top:10px;">
+                    This will save a PDF of the contract code to the backend server.
+                </p>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        const CURRENT_USER_KEY_PAGE = 'novaMintCurrentUser';
+        const GLOBAL_ACTIVITY_KEY = 'novaMintGlobalActivity';
+        const BACKEND_URL = 'http://127.0.0.1:5001';
+        let currentUser;
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const userJson = localStorage.getItem(CURRENT_USER_KEY_PAGE);
+            if (!userJson) {
+                alert("You need to be logged in to access this page.");
+                window.location.href = 'index.html';
+                return;
+            }
+            currentUser = JSON.parse(userJson);
+        });
+
+        const uploadForm = document.getElementById('uploadForm');
+        uploadForm.addEventListener('submit', function(event) {
+            event.preventDefault();
+            const name = document.getElementById('nftName').value.trim();
+            const price = document.getElementById('nftPrice').value;
+            const imageFile = document.getElementById('nftImage').files[0];
+
+            if (!name || !price || !imageFile) {
+                alert('Please provide NFT name, price, and an image file.');
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const timestamp = Date.now();
+                const newActivityItem = {
+                    id: `nft-${timestamp}`, // Unique ID for this specific item
+                    type: 'upload',
+                    name: name,
+                    price: parseFloat(price).toFixed(2),
+                    imageName: imageFile.name,
+                    imageDataUrl: e.target.result,
+                    timestamp: timestamp,
+                    originalOwner: currentUser.name,
+                    currentOwner: currentUser.name,
+                };
+                const globalActivity = JSON.parse(localStorage.getItem(GLOBAL_ACTIVITY_KEY)) || [];
+                globalActivity.push(newActivityItem);
+                localStorage.setItem(GLOBAL_ACTIVITY_KEY, JSON.stringify(globalActivity));
+
+                const contractCode = generateSolidityContract(name, imageFile.name, timestamp);
+                document.getElementById('solidityCodeOutput').textContent = contractCode;
+                document.getElementById('solidityCodeContainer').style.display = 'block';
+                
+                alert('NFT uploaded to marketplace and Solidity contract generated!');
+                uploadForm.reset();
+            };
+            reader.readAsDataURL(imageFile);
+        });
+
+        document.getElementById('savePdfButton').addEventListener('click', async () => {
+            const code = document.getElementById('solidityCodeOutput').textContent;
+            const nftName = document.getElementById('nftName').value.trim();
+            const contractFileName = `${nftName.replace(/[^a-zA-Z0-9]/g, '_') || 'NFT'}_Contract.sol`;
+            const button = document.getElementById('savePdfButton');
+            button.textContent = 'Saving...';
+            button.disabled = true;
+            try {
+                const response = await fetch(`${BACKEND_URL}/api/save-contract`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ filename: contractFileName, code: code })
+                });
+                const result = await response.json();
+                if (!response.ok) throw new Error(result.error);
+                alert(result.message);
+            } catch (error) {
+                alert(`Error saving contract: ${error.message}`);
+            } finally {
+                button.textContent = 'Save Contract as PDF';
+                button.disabled = false;
+            }
+        });
+
+        function generateSolidityContract(nftName, imageName, timestamp) {
+            const contractNftName = nftName.replace(/[^a-zA-Z0-9_]/g, '').replace(/\\s+/g, '') || "MyNFT";
+            return `// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
+import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
+import "@openzeppelin/contracts/token/ERC721/extensions/ERC721URIStorage.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/utils/Counters.sol";
+
+contract ${contractNftName} is ERC721, ERC721URIStorage, Ownable {
+    using Counters for Counters.Counter;
+    Counters.Counter private _tokenIdCounter;
+    string public constant nftCollectionName = "${nftName}";
+    string public constant nftImageReference = "${imageName}";
+    uint256 public constant creationTimestamp = ${timestamp};
+
+    constructor(address initialOwner)
+        ERC721("${nftName}", "${contractNftName.substring(0,4).toUpperCase()}") Ownable(initialOwner) {}
+
+    function safeMint(address to, string memory uri) public onlyOwner returns (uint256) {
+        _tokenIdCounter.increment();
+        uint256 newItemId = _tokenIdCounter.current();
+        _safeMint(to, newItemId);
+        _setTokenURI(newItemId, uri);
+        return newItemId;
+    }
+    function _update(address to, uint256 tokenId, address auth) internal override(ERC721, ERC721URIStorage) returns (address) { return super._update(to, tokenId, auth); }
+    function _increaseBalance(address account, uint128 amount) internal override(ERC721, ERC721URIStorage) { super._increaseBalance(account, amount); }
+    function tokenURI(uint256 tokenId) public view override(ERC721, ERC721URIStorage) returns (string memory) { return super.tokenURI(tokenId); }
+    function supportsInterface(bytes4 interfaceId) public view override(ERC721, ERC721URIStorage) returns (bool) { return super.supportsInterface(interfaceId); }
+    function _burn(uint256 tokenId) internal override(ERC721, ERC721URIStorage) { super._burn(tokenId); }
+}`;
+        }
+    </script>
+</body>
+</html>

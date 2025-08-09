@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Welcome to NovaMint</title>
+    <link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+    <div class="auth-wrapper">
+        <div class="auth-box">
+            <h1 id="formTitle">Login to <span>NovaMint</span></h1>
+            <div id="errorMessage" class="error-message"></div>
+            <div id="metamaskInstallPrompt" class="metamask-install-prompt" style="display: none;">
+                <p><strong>Metamask Wallet Not Detected!</strong></p>
+                <p>To interact with NovaMint, you need the Metamask browser extension.</p>
+                <a href="https://metamask.io/download/" target="_blank" rel="noopener noreferrer">Install Metamask</a>
+            </div>
+            <form id="loginForm">
+                <div class="form-group">
+                    <label for="loginEmail">Email</label>
+                    <input type="email" id="loginEmail" required>
+                </div>
+                <div class="form-group">
+                    <label for="loginPassword">Password</label>
+                    <input type="password" id="loginPassword" required>
+                </div>
+                <button type="submit" class="auth-button">Login</button>
+            </form>
+            <form id="signupForm" style="display: none;">
+                <div class="form-group">
+                    <label for="signupName">Full Name</label>
+                    <input type="text" id="signupName" required>
+                </div>
+                <div class="form-group">
+                    <label for="signupEmail">Email</label>
+                    <input type="email" id="signupEmail" required>
+                </div>
+                <div class="form-group">
+                    <label for="signupPassword">Password</label>
+                    <input type="password" id="signupPassword" required>
+                </div>
+                <div class="form-group">
+                    <label for="signupMetamask">Metamask Address (Optional)</label>
+                    <input type="text" id="signupMetamask" placeholder="0x...">
+                </div>
+                <button type="submit" class="auth-button">Sign Up</button>
+            </form>
+            <button id="connectMetamaskBtn" class="auth-button metamask-button">Login with Metamask</button>
+            <p class="toggle-auth-link">
+                <span id="toggleMessage">Don't have an account? </span>
+                <a href="#" id="toggleLink">Sign Up</a>
+            </p>
+        </div>
+    </div>
+    <script>
+        const loginForm = document.getElementById('loginForm');
+        const signupForm = document.getElementById('signupForm');
+        const formTitle = document.getElementById('formTitle');
+        const toggleMessage = document.getElementById('toggleMessage');
+        const toggleLink = document.getElementById('toggleLink');
+        const connectMetamaskBtn = document.getElementById('connectMetamaskBtn');
+        const errorMessageDiv = document.getElementById('errorMessage');
+        const metamaskInstallPrompt = document.getElementById('metamaskInstallPrompt');
+        const USERS_DB_KEY = 'novaMintUsers';
+        const CURRENT_USER_KEY = 'novaMintCurrentUser';
+        if (!localStorage.getItem(USERS_DB_KEY)) {
+            localStorage.setItem(USERS_DB_KEY, JSON.stringify([]));
+        }
+        function displayError(message) { errorMessageDiv.textContent = message; }
+        function clearError() { errorMessageDiv.textContent = ''; }
+        function getUsers() { return JSON.parse(localStorage.getItem(USERS_DB_KEY)); }
+        function saveUsers(users) { localStorage.setItem(USERS_DB_KEY, JSON.stringify(users)); }
+        function setCurrentUser(user) {
+            localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(user));
+            window.location.href = 'dashboard.html';
+        }
+        if (typeof window.ethereum === 'undefined') {
+            if (metamaskInstallPrompt) metamaskInstallPrompt.style.display = 'block';
+            if (connectMetamaskBtn) {
+                connectMetamaskBtn.disabled = true;
+                connectMetamaskBtn.style.opacity = '0.5';
+                connectMetamaskBtn.style.cursor = 'not-allowed';
+            }
+        }
+        if (toggleLink) {
+            toggleLink.addEventListener('click', (e) => {
+                e.preventDefault();
+                clearError();
+                if (loginForm.style.display === 'none') {
+                    loginForm.style.display = 'block';
+                    signupForm.style.display = 'none';
+                    formTitle.innerHTML = 'Login to <span>NovaMint</span>';
+                    toggleMessage.textContent = "Don't have an account? ";
+                    toggleLink.textContent = 'Sign Up';
+                    if (connectMetamaskBtn) connectMetamaskBtn.textContent = 'Login with Metamask';
+                } else {
+                    loginForm.style.display = 'none';
+                    signupForm.style.display = 'block';
+                    formTitle.innerHTML = 'Sign Up for <span>NovaMint</span>';
+                    toggleMessage.textContent = 'Already have an account? ';
+                    toggleLink.textContent = 'Login';
+                    if (connectMetamaskBtn) connectMetamaskBtn.textContent = 'Sign Up with Metamask';
+                }
+            });
+        }
+        if (loginForm) {
+            loginForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                clearError();
+                const email = document.getElementById('loginEmail').value;
+                const password = document.getElementById('loginPassword').value;
+                const users = getUsers();
+                const user = users.find(u => u.email === email && u.password === password);
+                if (user) {
+                    setCurrentUser(user);
+                } else {
+                    displayError('Invalid email or password.');
+                }
+            });
+        }
+        if (signupForm) {
+            signupForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                clearError();
+                const name = document.getElementById('signupName').value.trim();
+                const email = document.getElementById('signupEmail').value.trim();
+                const password = document.getElementById('signupPassword').value;
+                const metamaskAddressInput = document.getElementById('signupMetamask').value.trim().toLowerCase();
+                if (!name || !email || !password) {
+                    displayError('Name, Email, and Password are required.');
+                    return;
+                }
+                const users = getUsers();
+                if (users.find(u => u.email === email)) {
+                    displayError('An account with this email already exists.');
+                    return;
+                }
+                if (metamaskAddressInput && metamaskAddressInput.length > 0 && users.find(u => u.metamaskAddress === metamaskAddressInput)) {
+                    displayError('This Metamask address is already associated with an account.');
+                    return;
+                }
+                const newUser = { name, email, password, metamaskAddress: metamaskAddressInput || null, profilePicDataUrl: null, bio: "" };
+                users.push(newUser);
+                saveUsers(users);
+                setCurrentUser(newUser);
+            });
+        }
+        if (connectMetamaskBtn) {
+            connectMetamaskBtn.addEventListener('click', async () => {
+                clearError();
+                if (typeof window.ethereum === 'undefined') {
+                    if (metamaskInstallPrompt) metamaskInstallPrompt.style.display = 'block';
+                    displayError('Please install Metamask to use this feature.');
+                    return;
+                }
+                try {
+                    const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+                    const connectedMetamaskAddress = accounts[0].toLowerCase();
+                    const users = getUsers();
+                    let user = users.find(u => u.metamaskAddress === connectedMetamaskAddress);
+                    if (user) {
+                        setCurrentUser(user);
+                    } else {
+                        let name, email;
+                        if (signupForm.style.display !== 'none') {
+                            name = document.getElementById('signupName').value.trim();
+                            email = document.getElementById('signupEmail').value.trim();
+                            if (!name || !email) {
+                                displayError('Please enter Name and Email on the form before signing up with Metamask, or switch to the Login view to auto-generate details.');
+                                return;
+                            }
+                            if (users.find(u => u.email === email)) {
+                                displayError('The email entered on the form is already registered. Try logging in or use a different email.');
+                                return;
+                            }
+                        } else {
+                            name = `User ${connectedMetamaskAddress.substring(2, 8)}`;
+                            let potentialEmail = `metamask-${connectedMetamaskAddress.substring(2, 8)}@novamint.io`;
+                            let counter = 0;
+                            while (users.find(u => u.email === potentialEmail)) {
+                                counter++;
+                                potentialEmail = `metamask-${connectedMetamaskAddress.substring(2, 8)}-${counter}@novamint.io`;
+                            }
+                            email = potentialEmail;
+                        }
+                        const newUser = { name: name, email: email, password: `metamask_pw_${Date.now()}`, metamaskAddress: connectedMetamaskAddress, profilePicDataUrl: null, bio: "" };
+                        users.push(newUser);
+                        saveUsers(users);
+                        setCurrentUser(newUser);
+                    }
+                } catch (error) {
+                    console.error("Metamask connection error:", error);
+                    if (error.code === 4001) {
+                        displayError('Metamask connection request rejected.');
+                    } else {
+                        displayError('Error connecting to Metamask. See console for details.');
+                    }
+                }
+            });
+        }
+        if (localStorage.getItem(CURRENT_USER_KEY)) {
+            window.location.href = 'dashboard.html';
+        }
+    </script>
+</body>
+</html>

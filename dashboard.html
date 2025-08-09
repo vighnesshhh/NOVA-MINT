@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - NovaMint</title>
+    <link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+    <header class="main-header">
+        <div class="logo-container">
+            <a href="dashboard.html" class="logo-text">Nova<span>Mint</span></a>
+        </div>
+        <nav class="nav-buttons">
+            <a href="https://remix.ethereum.org/" target="_blank" class="header-action-button">Open Remix IDE</a>
+            <button id="transactionsBtnHeader" class="header-action-button">Transactions</button>
+            <button id="mintNftBtnHeader" class="header-action-button" onclick="window.location.href='mint.html'">Mint NFT</button>
+            <button id="uploadNftBtnHeader" class="header-action-button" onclick="window.location.href='upload.html'">Upload NFT</button>
+        </nav>
+        <div class="profile-area">
+            <div id="profileAvatar" class="profile-avatar">?</div>
+            <div id="profileDropdown" class="profile-dropdown">
+                <div class="profile-dropdown-item user-name" id="dropdownUserName">User Name</div>
+                <div class="profile-dropdown-item user-email" id="dropdownUserEmail">user@example.com</div>
+                <div class="profile-dropdown-item user-metamask" id="dropdownUserMetamask">Metamask: Not Linked</div>
+                <div class="profile-dropdown-item user-bio" id="dropdownUserBio"></div>
+                <hr>
+                <button class="profile-dropdown-button" id="editProfileBtn">Edit Profile</button>
+                <button class="profile-dropdown-button" id="logoutButton">Logout</button>
+            </div>
+        </div>
+    </header>
+
+    <main class="container dashboard-main">
+        <h1 class="page-title" id="welcomeMessage">Welcome to <span>NovaMint</span></h1>
+
+        <section class="image-generation-section">
+            <h2 class="section-title">🎨 Image Generation Tool</h2>
+            <div class="form-page-container" style="max-width: none; padding: 1.5rem;">
+                <div class="form-group">
+                    <label for="dashboardPrompt">Enter a prompt to generate an image (e.g., "tigers in the snow")</label>
+                    <input type="text" id="dashboardPrompt" placeholder="Your image idea...">
+                </div>
+                <button id="dashboardGenerateBtn" class="submit-button" style="width: auto; padding: 0.8rem 1.5rem;">Generate Image</button>
+                <div id="dashboardImageResult" style="margin-top: 1.5rem; min-height: 50px;">
+                    <p>Your generated image will appear here.</p>
+                </div>
+            </div>
+        </section>
+
+        <section class="activity-feed-section">
+            <h2 class="section-title">🌍 Marketplace</h2>
+            <div id="globalActivityFeed" class="nft-grid">
+                <p style="color: var(--secondary-text);">No NFTs available in the marketplace yet.</p>
+            </div>
+        </section>
+    </main>
+
+    <div id="transactionsPopupOverlay" class="popup-overlay">
+        <div class="popup-content" style="max-width: 800px;">
+            <button class="popup-close-btn" id="closeTransactionsPopupBtn">×</button>
+            <h2>Transaction History</h2>
+            <div id="transactionsList" style="max-height: 400px; overflow-y: auto;">
+                <p>No transactions recorded yet.</p>
+            </div>
+        </div>
+    </div>
+
+    <div id="editProfileModal" class="popup-overlay">
+        <div class="popup-content">
+            <button class="popup-close-btn" id="closeEditProfileModalBtn">×</button>
+            <h2>Edit Your Profile</h2>
+            <img id="profilePicPreview" src="" alt="Profile Preview" style="width: 100px; height: 100px; border-radius: 50%; object-fit: cover; margin-bottom: 1rem;">
+            <div class="form-group">
+                <label for="profilePicInput">Change Profile Picture</label>
+                <input type="file" id="profilePicInput" accept="image/*">
+            </div>
+            <div class="form-group">
+                <label for="profileNameInput">Full Name</label>
+                <input type="text" id="profileNameInput">
+            </div>
+            <div class="form-group">
+                <label for="profileBioInput">Bio (max 150 chars)</label>
+                <textarea id="profileBioInput" rows="3" maxlength="150"></textarea>
+            </div>
+            <button id="saveProfileChangesBtn" class="submit-button">Save Changes</button>
+        </div>
+    </div>
+    
+    <!-- ====== CHATBOT MIA: HTML STRUCTURE ====== -->
+    <div class="chatbot-toggler" id="chatbotToggler">
+        <!-- Icon of a girl/user -->
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+    </div>
+
+    <div class="chatbot-container" id="chatbotContainer">
+        <div class="chatbot-header">
+            <h3>Mia <span>NovaMint Assistant</span></h3>
+            <button class="close-chatbot-btn" id="closeChatbotBtn">×</button>
+        </div>
+        <div class="chat-log" id="chatLog">
+            <!-- Messages will be appended here -->
+        </div>
+        <form class="chat-input-form" id="chatInputForm">
+            <input type="text" id="chatInput" placeholder="Ask Mia anything..." autocomplete="off">
+            <button type="submit">Send</button>
+        </form>
+    </div>
+    <!-- ====== END CHATBOT MIA ====== -->
+
+
+    <script>
+        const CURRENT_USER_KEY = 'novaMintCurrentUser';
+        const GLOBAL_ACTIVITY_KEY = 'novaMintGlobalActivity';
+        const BACKEND_URL = 'http://127.0.0.1:5001';
+        const NFT_LIFESPAN_MINUTES = 5;
+
+        // --- Element Selectors ---
+        const globalActivityFeed = document.getElementById('globalActivityFeed');
+        const transactionsBtnHeader = document.getElementById('transactionsBtnHeader');
+        const transactionsPopupOverlay = document.getElementById('transactionsPopupOverlay');
+        const closeTransactionsPopupBtn = document.getElementById('closeTransactionsPopupBtn');
+        const transactionsList = document.getElementById('transactionsList');
+        const dashboardPromptInput = document.getElementById('dashboardPrompt');
+        const dashboardGenerateBtn = document.getElementById('dashboardGenerateBtn');
+        const dashboardImageResult = document.getElementById('dashboardImageResult');
+        const profileAvatar = document.getElementById('profileAvatar');
+        const profileDropdown = document.getElementById('profileDropdown');
+        const logoutButton = document.getElementById('logoutButton');
+        const welcomeMessage = document.getElementById('welcomeMessage');
+        const editProfileBtn = document.getElementById('editProfileBtn');
+        const editProfileModal = document.getElementById('editProfileModal');
+        const closeEditProfileModalBtn = document.getElementById('closeEditProfileModalBtn');
+
+        // --- Core Functions ---
+        function getCurrentUser() {
+            return JSON.parse(localStorage.getItem(CURRENT_USER_KEY));
+        }
+
+        function logout() {
+            localStorage.removeItem(CURRENT_USER_KEY);
+            window.location.href = 'index.html';
+        }
+
+        function updateProfileDisplay(user) {
+            if (!user) return;
+            if (user.profilePicDataUrl) {
+                profileAvatar.innerHTML = `<img src="${user.profilePicDataUrl}" alt="${user.name?.[0]}" style="width:100%; height:100%; border-radius:50%; object-fit:cover;">`;
+            } else {
+                profileAvatar.textContent = user.name ? user.name[0].toUpperCase() : 'U';
+            }
+            document.getElementById('dropdownUserName').textContent = user.name || "N/A";
+            document.getElementById('dropdownUserEmail').textContent = user.email || "N/A";
+            document.getElementById('dropdownUserMetamask').textContent = user.metamaskAddress ? `Metamask: ${user.metamaskAddress.substring(0,10)}...` : "Metamask: Not Linked";
+            document.getElementById('dropdownUserBio').textContent = user.bio || "No bio yet.";
+            welcomeMessage.innerHTML = `Welcome, <span>${user.name || user.email?.split('@')[0]}</span>!`;
+        }
+
+        function displayActivityItem(item) {
+            const card = document.createElement('div');
+            card.classList.add('activity-card');
+            card.id = `card-${item.id}`; // Give card a unique ID
+            const imageHtml = (item.imageDataUrl || item.assetDataUrl) ? `<div class="activity-card-image"><img src="${item.imageDataUrl || item.assetDataUrl}" alt="${item.name}"></div>` : '';
+            
+            card.innerHTML = `
+                ${imageHtml}
+                <h3 class="activity-card-title">${item.name}</h3>
+                <p class="activity-card-details">Owner: <strong>${item.currentOwner}</strong></p>
+                <div class="activity-card-price">Price: ${item.price} ETH</div>
+                <div class="activity-card-timer" id="timer-${item.id}"></div>
+                <button class="buy-button" data-nft-id="${item.id}">Buy</button>
+            `;
+            globalActivityFeed.appendChild(card);
+            startTimer(item.timestamp, `timer-${item.id}`, item.id);
+        }
+
+        function startTimer(creationTimestamp, timerElementId, nftId) {
+            const timerElement = document.getElementById(timerElementId);
+            if (!timerElement) return;
+            const endTime = creationTimestamp + NFT_LIFESPAN_MINUTES * 60 * 1000;
+
+            const interval = setInterval(() => {
+                const distance = endTime - new Date().getTime();
+                const buyButton = document.querySelector(`#card-${nftId} .buy-button`);
+
+                if (distance < 0) {
+                    clearInterval(interval);
+                    timerElement.innerHTML = "<strong>Expired</strong>";
+                    timerElement.style.color = "var(--error-color)";
+                    if (buyButton) {
+                        buyButton.disabled = true;
+                        buyButton.textContent = "Expired";
+                    }
+                    return;
+                }
+                const minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
+                const seconds = Math.floor((distance % (1000 * 60)) / 1000);
+                timerElement.innerHTML = `Expires in: ${minutes}m ${seconds}s`;
+            }, 1000);
+        }
+
+        function loadActivityFeed() {
+            const allActivity = JSON.parse(localStorage.getItem(GLOBAL_ACTIVITY_KEY)) || [];
+            globalActivityFeed.innerHTML = '';
+            if (allActivity.length === 0) {
+                globalActivityFeed.innerHTML = '<p style="color: var(--secondary-text); grid-column: 1 / -1;">No NFTs available in the marketplace yet.</p>';
+            } else {
+                allActivity.slice().reverse().forEach(displayActivityItem);
+            }
+        }
+
+        async function handleBuyClick(event) {
+            const button = event.target;
+            if (!button.classList.contains('buy-button')) return;
+
+            const nftId = button.dataset.nftId;
+            const allActivity = JSON.parse(localStorage.getItem(GLOBAL_ACTIVITY_KEY)) || [];
+            const nftIndex = allActivity.findIndex(item => item.id === nftId);
+            
+            if (nftIndex === -1) {
+                alert("Error: This NFT no longer exists.");
+                button.closest('.activity-card').remove();
+                return;
+            }
+
+            const nft = allActivity[nftIndex];
+            const currentUser = getCurrentUser();
+
+            if (currentUser.name === nft.currentOwner) {
+                alert("You already own this NFT.");
+                return;
+            }
+
+            button.textContent = 'Processing...';
+            button.disabled = true;
+
+            try {
+                const response = await fetch(`${BACKEND_URL}/api/record-transaction`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        nftName: nft.name,
+                        price: nft.price,
+                        sellerInfo: nft.currentOwner,
+                        buyerInfo: `${currentUser.name} (${currentUser.email})`,
+                    })
+                });
+                const result = await response.json();
+                if (!response.ok) throw new Error(result.error || "Transaction failed on the server.");
+                
+                // --- Ownership Transfer Logic ---
+                nft.currentOwner = currentUser.name;
+                allActivity[nftIndex] = nft;
+                localStorage.setItem(GLOBAL_ACTIVITY_KEY, JSON.stringify(allActivity));
+                
+                alert(`Purchase successful! You are now the owner of ${nft.name}.`);
+                
+                // Update the card on the screen
+                const card = document.getElementById(`card-${nftId}`);
+                if (card) {
+                    card.querySelector('.activity-card-details strong').textContent = currentUser.name;
+                    button.textContent = 'You Own This';
+                    card.style.opacity = '0.7';
+                    card.style.border = '1px solid var(--accent-color)';
+                }
+
+            } catch (error) {
+                alert(`Error during purchase: ${error.message}`);
+                button.textContent = 'Buy';
+                button.disabled = false;
+            }
+        }
+
+        async function showTransactions() {
+            transactionsList.innerHTML = '<p>Loading history...</p>';
+            transactionsPopupOverlay.style.display = 'flex';
+            try {
+                const response = await fetch(`${BACKEND_URL}/api/get-transactions`);
+                const transactions = await response.json();
+                if (!response.ok) throw new Error(transactions.error || "Failed to fetch");
+
+                if (transactions.length === 0) {
+                    transactionsList.innerHTML = '<p>No transactions recorded yet.</p>';
+                    return;
+                }
+                
+                let tableHtml = `<table style="width: 100%; border-collapse: collapse;">
+                    <thead><tr>
+                        <th style="text-align: left; padding: 8px; border-bottom: 1px solid #444;">NFT</th>
+                        <th style="text-align: left; padding: 8px; border-bottom: 1px solid #444;">Price</th>
+                        <th style="text-align: left; padding: 8px; border-bottom: 1px solid #444;">Buyer</th>
+                        <th style="text-align: left; padding: 8px; border-bottom: 1px solid #444;">Seller</th>
+                        <th style="text-align: left; padding: 8px; border-bottom: 1px solid #444;">Date</th>
+                    </tr></thead><tbody>`;
+                
+                // Correctly display most recent first
+                transactions.slice().reverse().forEach(tx => {
+                    tableHtml += `<tr>
+                        <td style="padding: 8px; border-bottom: 1px solid #333;">${tx.NFT || 'N/A'}</td>
+                        <td style="padding: 8px; border-bottom: 1px solid #333;">${tx.Price || 'N/A'}</td>
+                        <td style="padding: 8px; border-bottom: 1px solid #333;">${tx.Buyer || 'N/A'}</td>
+                        <td style="padding: 8px; border-bottom: 1px solid #333;">${tx.Seller || 'N/A'}</td>
+                        <td style="padding: 8px; border-bottom: 1px solid #333;">${tx.Date || 'N/A'}</td>
+                    </tr>`;
+                });
+
+                tableHtml += '</tbody></table>';
+                transactionsList.innerHTML = tableHtml;
+
+            } catch (error) {
+                transactionsList.innerHTML = `<p style="color: var(--error-color)">Failed to load transaction history: ${error.message}</p>`;
+            }
+        }
+
+        async function handleDashboardImageGeneration() {
+            const prompt = dashboardPromptInput.value.trim();
+            if (!prompt) {
+                dashboardImageResult.innerHTML = '<p style="color: var(--error-color);">Please enter a prompt.</p>';
+                return;
+            }
+            dashboardGenerateBtn.textContent = 'Generating...';
+            dashboardGenerateBtn.disabled = true;
+            dashboardImageResult.innerHTML = '<p>Fetching image...</p>';
+            try {
+                const response = await fetch(`${BACKEND_URL}/api/generate-dashboard-image`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ prompt: prompt })
+                });
+                const result = await response.json();
+                if (!response.ok) throw new Error(result.error);
+                dashboardImageResult.innerHTML = `<img src="${result.imageUrl}" alt="Image for ${prompt}" style="max-width: 100%; max-height: 400px; border-radius: 4px;">`;
+            } catch (error) {
+                dashboardImageResult.innerHTML = `<p style="color: var(--error-color);">Error: ${error.message}</p>`;
+            } finally {
+                dashboardGenerateBtn.textContent = 'Generate Image';
+                dashboardGenerateBtn.disabled = false;
+            }
+        }
+        
+        // --- CHATBOT MIA: JAVASCRIPT LOGIC ---
+        const chatbotToggler = document.getElementById('chatbotToggler');
+        const chatbotContainer = document.getElementById('chatbotContainer');
+        const closeChatbotBtn = document.getElementById('closeChatbotBtn');
+        const chatLog = document.getElementById('chatLog');
+        const chatInputForm = document.getElementById('chatInputForm');
+        const chatInput = document.getElementById('chatInput');
+        
+        // !! SECURITY WARNING !! Your key is exposed here. Revoke it and use a backend.
+
+        const GROQ_API_KEY = "REPLACE_ME";
+        let conversationHistory = [];
+        let isChatbotOpen = false;
+
+        function addMessageToLog(sender, message) {
+            const messageElement = document.createElement('div');
+            messageElement.classList.add('chat-message', `${sender}-message`);
+            messageElement.textContent = message;
+            chatLog.appendChild(messageElement);
+            chatLog.scrollTop = chatLog.scrollHeight; // Auto-scroll to bottom
+        }
+
+        function toggleChatbot() {
+            isChatbotOpen = !isChatbotOpen;
+            chatbotContainer.classList.toggle('active');
+            if (isChatbotOpen && conversationHistory.length === 0) {
+                // First time opening, add welcome message
+                const welcomeMessage = "Hi! I'm Mia, your NovaMint assistant. You can ask me about NFTs, how to use the platform, or even for creative ideas. How can I help you today?";
+                addMessageToLog('bot', welcomeMessage);
+                conversationHistory.push({ role: 'assistant', content: welcomeMessage });
+            }
+        }
+
+        async function handleChatSubmit(e) {
+            e.preventDefault();
+            const userInput = chatInput.value.trim();
+            if (!userInput || !GROQ_API_KEY) return;
+
+            addMessageToLog('user', userInput);
+            conversationHistory.push({ role: 'user', content: userInput });
+            chatInput.value = '';
+
+            // Show typing indicator
+            const typingIndicator = document.createElement('div');
+            typingIndicator.classList.add('chat-message', 'bot-message', 'typing-indicator');
+            typingIndicator.textContent = 'Mia is typing...';
+            chatLog.appendChild(typingIndicator);
+            chatLog.scrollTop = chatLog.scrollHeight;
+
+            try {
+                const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+                    method: "POST",
+                    headers: {
+                        "Authorization": `Bearer ${GROQ_API_KEY}`,
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({
+                        model: "llama3-8b-8192",
+                        messages: [
+                            {
+                                role: "system",
+                                content: "You are Mia, a friendly, witty, and helpful AI assistant for NovaMint, a web platform for creating, buying, and selling NFTs. Keep your answers concise and easy to understand. You can explain what NFTs are, how to use the marketplace, and give creative prompts for the image generator."
+                            },
+                            ...conversationHistory
+                        ],
+                        temperature: 0.7,
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Groq API error: ${response.statusText}`);
+                }
+
+                const data = await response.json();
+                const botReply = data.choices[0]?.message?.content;
+                
+                if (botReply) {
+                    typingIndicator.remove(); // Remove typing indicator
+                    addMessageToLog('bot', botReply);
+                    conversationHistory.push({ role: 'assistant', content: botReply });
+                } else {
+                   throw new Error("Received an empty response from the AI.");
+                }
+
+            } catch (error) {
+                console.error("Chatbot error:", error);
+                typingIndicator.remove();
+                addMessageToLog('bot', "Sorry, I'm having a little trouble connecting right now. Please try again in a moment.");
+            }
+        }
+
+        // --- Event Listeners ---
+        document.addEventListener('DOMContentLoaded', () => {
+            const currentUser = getCurrentUser();
+            if (!currentUser) { window.location.href = 'index.html'; return; }
+            
+            updateProfileDisplay(currentUser);
+            loadActivityFeed();
+
+            profileAvatar.addEventListener('click', (e) => { e.stopPropagation(); profileDropdown.style.display = profileDropdown.style.display === 'block' ? 'none' : 'block'; });
+            document.addEventListener('click', (e) => { if (!profileAvatar.contains(e.target) && !profileDropdown.contains(e.target)) { profileDropdown.style.display = 'none'; } });
+            logoutButton.addEventListener('click', logout);
+            globalActivityFeed.addEventListener('click', handleBuyClick);
+            transactionsBtnHeader.addEventListener('click', showTransactions);
+            closeTransactionsPopupBtn.addEventListener('click', () => transactionsPopupOverlay.style.display = 'none');
+            dashboardGenerateBtn.addEventListener('click', handleDashboardImageGeneration);
+            
+            // Edit profile logic
+            editProfileBtn.addEventListener('click', () => {
+                const user = getCurrentUser();
+                document.getElementById('profileNameInput').value = user.name || '';
+                document.getElementById('profileBioInput').value = user.bio || '';
+                document.getElementById('profilePicPreview').src = user.profilePicDataUrl || '';
+                editProfileModal.style.display = 'flex';
+            });
+            closeEditProfileModalBtn.addEventListener('click', () => editProfileModal.style.display = 'none');
+
+            // CHATBOT Event Listeners
+            chatbotToggler.addEventListener('click', toggleChatbot);
+            closeChatbotBtn.addEventListener('click', toggleChatbot);
+            chatInputForm.addEventListener('submit', handleChatSubmit);
+        });
+    </script>
+</body>
+</html>

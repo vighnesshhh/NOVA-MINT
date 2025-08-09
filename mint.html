@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mint NFT - NovaMint</title>
+    <link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+    <header class="main-header">
+        <div class="logo-container">
+            <a href="dashboard.html" class="logo-text">Nova<span>Mint</span></a>
+        </div>
+        <nav class="nav-buttons">
+            <a href="dashboard.html" class="header-action-button">Dashboard</a>
+        </nav>
+    </header>
+
+    <main class="container">
+        <div class="form-page-container">
+            <h1>Define & Mint New NFT Collection</h1>
+            <p style="color: var(--secondary-text); margin-top: -1rem; margin-bottom: 1.5rem;">Create multiple copies of the same NFT to sell.</p>
+            <form id="mintForm">
+                <div class="form-group">
+                    <label for="nftNameMint">NFT Collection/Item Name</label>
+                    <input type="text" id="nftNameMint" required>
+                </div>
+                <div class="form-group">
+                    <label for="nftPriceMint">Price (in ETH)</label>
+                    <input type="number" id="nftPriceMint" min="0.01" step="0.01" required placeholder="e.g., 0.5">
+                </div>
+                <div class="form-group">
+                    <label for="nftQuantityMint">Quantity to Mint</label>
+                    <input type="number" id="nftQuantityMint" min="1" step="1" value="1" required>
+                </div>
+                <div class="form-group">
+                    <label for="nftDescriptionMint">Description (Optional)</label>
+                    <textarea id="nftDescriptionMint" rows="3"></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="nftImageMint">NFT Asset (Image, GIF, etc.)</label>
+                    <input type="file" id="nftImageMint" accept="image/*" required>
+                </div>
+                <button type="submit" class="submit-button">Mint & Generate Contract</button>
+            </form>
+
+            <div id="solidityCodeContainerMint" class="solidity-code-box" style="display:none;">
+                <h3>Generated Solidity Contract (ERC721 Template)</h3>
+                <pre id="solidityCodeOutputMint"></pre>
+                <button id="savePdfButton" class="submit-button download-sol-button">Save Contract as PDF</button>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        const CURRENT_USER_KEY_PAGE = 'novaMintCurrentUser';
+        const GLOBAL_ACTIVITY_KEY = 'novaMintGlobalActivity';
+        const BACKEND_URL = 'http://127.0.0.1:5001';
+        let currentUser;
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const userJson = localStorage.getItem(CURRENT_USER_KEY_PAGE);
+            if (!userJson) {
+                alert("You need to be logged in to access this page.");
+                window.location.href = 'index.html';
+                return;
+            }
+            currentUser = JSON.parse(userJson);
+        });
+
+        const mintForm = document.getElementById('mintForm');
+        mintForm.addEventListener('submit', function(event) {
+            event.preventDefault();
+            const name = document.getElementById('nftNameMint').value.trim();
+            const description = document.getElementById('nftDescriptionMint').value.trim();
+            const price = document.getElementById('nftPriceMint').value;
+            const quantity = parseInt(document.getElementById('nftQuantityMint').value, 10);
+            const assetFile = document.getElementById('nftImageMint').files[0];
+
+            if (!name || !price || !assetFile || !quantity || quantity < 1) {
+                alert('Please provide all required fields correctly.');
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const globalActivity = JSON.parse(localStorage.getItem(GLOBAL_ACTIVITY_KEY)) || [];
+                
+                for (let i = 0; i < quantity; i++) {
+                    const timestamp = Date.now() + i; // Ensure unique timestamp for unique ID
+                    const newActivityItem = {
+                        id: `nft-${timestamp}`, // Unique ID for each minted copy
+                        type: 'mint',
+                        name: `${name} #${i + 1}`, // Add edition number
+                        price: parseFloat(price).toFixed(2),
+                        description: description,
+                        assetName: assetFile.name,
+                        assetDataUrl: e.target.result,
+                        timestamp: timestamp,
+                        originalOwner: currentUser.name,
+                        currentOwner: currentUser.name,
+                    };
+                    globalActivity.push(newActivityItem);
+                }
+                
+                localStorage.setItem(GLOBAL_ACTIVITY_KEY, JSON.stringify(globalActivity));
+
+                const contractCode = generateSolidityContractForMint(name, assetFile.name, description, Math.floor(Date.now() / 1000));
+                document.getElementById('solidityCodeOutputMint').textContent = contractCode;
+                document.getElementById('solidityCodeContainerMint').style.display = 'block';
+                
+                alert(`${quantity} NFT(s) minted and added to marketplace!`);
+                mintForm.reset();
+            };
+            reader.readAsDataURL(assetFile);
+        });
+
+        document.getElementById('savePdfButton').addEventListener('click', async () => {
+            const code = document.getElementById('solidityCodeOutputMint').textContent;
+            const nftName = document.getElementById('nftNameMint').value.trim();
+            const contractFileName = `${nftName.replace(/[^a-zA-Z0-9]/g, '_') || 'NFT'}_Collection.sol`;
+            const button = document.getElementById('savePdfButton');
+            button.textContent = 'Saving...';
+            button.disabled = true;
+            try {
+                const response = await fetch(`${BACKEND_URL}/api/save-contract`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ filename: contractFileName, code: code })
+                });
+                const result = await response.json();
+                if (!response.ok) throw new Error(result.error);
+                alert(result.message);
+            } catch (error) {
+                alert(`Error saving contract: ${error.message}`);
+            } finally {
+                button.textContent = 'Save Contract as PDF';
+                button.disabled = false;
+            }
+        });
+
+        function generateSolidityContractForMint(nftName, assetName, description, timestamp) {
+            const contractNftName = nftName.replace(/[^a-zA-Z0-9_]/g, '').replace(/\\s+/g, '') || "MyNFTCollection";
+            const descriptionComment = description ? `    // Description: ${description.replace(/\\n/g, '\\n//              ')}\\n` : '';
+            return `// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
+import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
+import "@openzeppelin/contracts/token/ERC721/extensions/ERC721URIStorage.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/utils/Counters.sol";
+
+contract ${contractNftName} is ERC721, ERC721URIStorage, Ownable {
+    using Counters for Counters.Counter;
+    Counters.Counter private _tokenIdCounter;
+    string public constant collectionName = "${nftName}";
+${descriptionComment}    string public constant defaultAssetName = "${assetName}";
+    uint256 public constant creationTimestamp = ${timestamp};
+
+    constructor(address initialOwner)
+        ERC721("${nftName}", "${contractNftName.substring(0,4).toUpperCase()}") Ownable(initialOwner) {}
+
+    function mintNFT(address recipient, string memory tokenURI) public onlyOwner returns (uint256) {
+        _tokenIdCounter.increment();
+        uint256 newItemId = _tokenIdCounter.current();
+        _safeMint(recipient, newItemId);
+        _setTokenURI(newItemId, tokenURI);
+        return newItemId;
+    }
+    function _update(address to, uint256 tokenId, address auth) internal override(ERC721, ERC721URIStorage) returns (address) { return super._update(to, tokenId, auth); }
+    function _increaseBalance(address account, uint128 amount) internal override(ERC721, ERC721URIStorage) { super._increaseBalance(account, amount); }
+    function tokenURI(uint256 tokenId) public view override(ERC721, ERC721URIStorage) returns (string memory) { return super.tokenURI(tokenId); }
+    function supportsInterface(bytes4 interfaceId) public view override(ERC721, ERC721URIStorage) returns (bool) { return super.supportsInterface(interfaceId); }
+    function _burn(uint256 tokenId) internal override(ERC721, ERC721URIStorage) { super._burn(tokenId); }
+}`;
+        }
+    </script>
+</body>
+</html>
